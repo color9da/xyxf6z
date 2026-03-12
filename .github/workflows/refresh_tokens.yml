@@ -1,0 +1,59 @@
+name: Auto Refresh Tokens Monthly
+
+on:
+  schedule:
+    # Run on the 1st of every month at midnight UTC
+    - cron: '0 0 1 * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  refresh-tokens:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests python-dotenv
+
+      - name: Run token refresh script
+        run: python refresh_tokens.py
+        env:
+          # Facebook App credentials (needed for token exchange)
+          FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
+          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
+          
+          # Current tokens
+          FACEBOOK_ACCESS_TOKEN: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          
+          # Instagram (will be updated by script)
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+
+      - name: Commit and push if changed
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Add only .env (be careful not to commit secrets!)
+          git add .env 2>/dev/null || true
+          
+          # Only commit if there are changes
+          if ! git diff --staged --quiet; then
+            git commit -m "Auto-refresh tokens [skip ci]"
+            git push
+            echo "✅ Tokens refreshed and pushed"
+          else
+            echo "ℹ️ No changes to commit"
+          fi
