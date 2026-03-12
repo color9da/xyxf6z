@@ -16,17 +16,19 @@ def upload_to_instagram(video_path, caption, is_story=False):
     """
     Upload video to Instagram via temporary public URL.
     Can be a Reel or a Story.
+    
+    Uses Instagram Graph API endpoints (NOT Facebook endpoints).
     """
     media_type = 'STORIES' if is_story else 'REELS'
-    
+
     print("\n" + "=" * 60)
     print(f"📸 INSTAGRAM {media_type} UPLOAD STARTING")
     print("=" * 60)
-    
-    # Get credentials with fallbacks
-    access_token = os.getenv('INSTAGRAM_ACCESS_TOKEN') or os.getenv('FACEBOOK_ACCESS_TOKEN')
-    user_id = os.getenv('INSTAGRAM_ACCOUNT_ID') or os.getenv('IG_USER_ID')
-    
+
+    # Get Instagram credentials
+    access_token = os.getenv('INSTAGRAM_ACCESS_TOKEN')
+    user_id = os.getenv('INSTAGRAM_ACCOUNT_ID')
+
     # Debug info (masked)
     def mask(s): return f"{s[:10]}...{s[-4:]}" if s and len(s) > 10 else ("PLACEHOLDER" if s == "***" else "MISSING")
     print(f"[instagram] User ID Provided: {user_id}")
@@ -35,28 +37,60 @@ def upload_to_instagram(video_path, caption, is_story=False):
     if not access_token:
         raise ValueError("❌ INSTAGRAM_ACCESS_TOKEN not set")
     
-    # AUTO-DETECTION: If token is IGAA (Personal/Standard), the ID might be different
-    if access_token.startswith('IGAA'):
-        print("[instagram] 🔍 Detected 'IGAA' token (Instagram Basic/Standard API)")
-        print("[instagram] Fetching correct ID for this token...")
-        try:
-            me_resp = requests.get(f"https://graph.instagram.com/me?fields=id,username&access_token={access_token}", timeout=10)
-            if me_resp.status_code == 200:
-                me_data = me_resp.json()
-                detected_id = me_data.get('id')
-                if detected_id and detected_id != user_id:
-                    print(f"[instagram] ⚠️  ID Mismatch! Provided: {user_id}, Detected: {detected_id}")
-                    print(f"[instagram] 🔄 Using detected ID: {detected_id}")
-                    user_id = detected_id
-            else:
-                print(f"[instagram] ⚠️  Could not verify token: {me_resp.text}")
-        except Exception as e:
-            print(f"[instagram] ⚠️  Error during ID verification: {e}")
-
     if not user_id:
         raise ValueError("❌ INSTAGRAM_ACCOUNT_ID not set")
+
+    # Validate Instagram token using Instagram Graph API endpoint
+    print("[instagram] 🔍 Validating Instagram access token...")
+    print("[instagram] Using endpoint: graph.instagram.com (NOT graph.facebook.com)")
     
-    print(f"[instagram] ✅ Credentials loaded")
+    try:
+        # CORRECT Instagram Graph API endpoint
+        test_resp = requests.get(
+            f"https://graph.instagram.com/me",
+            params={
+                "fields": "id,username,account_type",
+                "access_token": access_token
+            },
+            timeout=10
+        )
+        
+        if test_resp.status_code == 200:
+            test_data = test_resp.json()
+            print(f"[instagram] ✅ Instagram Token is VALID!")
+            print(f"[instagram] Username: @{test_data.get('username', 'N/A')}")
+            print(f"[instagram] Account Type: {test_data.get('account_type', 'N/A')}")
+            
+            # Verify ID matches
+            ig_id_from_token = test_data.get('id')
+            if ig_id_from_token:
+                if str(ig_id_from_token) == str(user_id):
+                    print(f"[instagram] ✅ Account ID matches!")
+                else:
+                    print(f"[instagram] ⚠️  ID mismatch!")
+                    print(f"   In .env: {user_id}")
+                    print(f"   From token: {ig_id_from_token}")
+                    print(f"[instagram] 🔄 Using ID from token: {ig_id_from_token}")
+                    user_id = ig_id_from_token
+        else:
+            error_data = test_resp.json() if test_resp.text else {}
+            error_msg = error_data.get('error', {}).get('message', 'Invalid token')
+            error_code = error_data.get('error', {}).get('code', 'Unknown')
+            
+            print(f"[instagram] ❌ Instagram Token INVALID!")
+            print(f"[instagram] Error Code: {error_code}")
+            print(f"[instagram] Error: {error_msg}")
+            print(f"[instagram] Response: {test_resp.text[:300]}")
+            print(f"[instagram] ⚠️  SKIPPING Instagram upload")
+            print(f"[instagram] 📖 See INSTAGRAM_SETUP.md to get new token")
+            
+            raise Exception(f"Instagram token invalid (Code {error_code}): {error_msg}")
+            
+    except requests.exceptions.RequestException as e:
+        print(f"[instagram] ❌ Network error validating token: {e}")
+        raise Exception(f"Instagram connection failed: {e}")
+    
+    print(f"[instagram] ✅ Instagram credentials validated successfully")
     
     # Check video file
     video_path_obj = Path(video_path)
