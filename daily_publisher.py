@@ -43,7 +43,8 @@ def mark_as_published(video_name, metadata):
         json.dump(published, f, indent=4)
 
 def select_video(specific_video=None):
-    published = [item["video_name"] for item in get_already_published()]
+    published_entries = get_already_published()
+    published_names = [item["video_name"] for item in published_entries]
     all_videos = sorted(glob.glob(os.path.join(PROCESSED_DIR, "*.mp4")))
 
     if specific_video:
@@ -58,7 +59,7 @@ def select_video(specific_video=None):
             name = specific_video
 
         if os.path.exists(vid_path):
-            if name in published:
+            if name in published_names:
                 print(f"🔄 Video {name} was already published - Re-publishing (recycling)")
             return vid_path, name
         else:
@@ -68,16 +69,32 @@ def select_video(specific_video=None):
     # Find first unpublished video
     for vid in all_videos:
         name = os.path.basename(vid)
-        if name not in published:
+        if name not in published_names:
             return vid, name
     
-    # All videos are published - recycle the first one
+    # All videos are published - use FAIR ROTATION
     if all_videos:
-        first_video = all_videos[0]
-        name = os.path.basename(first_video)
-        print(f"\n⚠️  All videos have been published. Recycling from the beginning...")
-        print(f"🔄 Re-publishing: {name}")
-        return first_video, name
+        print(f"\n⚠️  All videos have been published. Recycling with fair rotation...")
+        
+        # Find the least recently published video from our local files
+        # Match against published_videos.json order (chronological)
+        video_to_recycle = None
+        
+        for pub_name in published_names:
+            for vid_path in all_videos:
+                if os.path.basename(vid_path) == pub_name:
+                    video_to_recycle = vid_path
+                    break
+            if video_to_recycle:
+                break
+        
+        # Fallback to first video if no match
+        if not video_to_recycle:
+            video_to_recycle = all_videos[0]
+        
+        name = os.path.basename(video_to_recycle)
+        print(f"🔄 Re-publishing (fair rotation): {name}")
+        return video_to_recycle, name
     
     return None, None
 

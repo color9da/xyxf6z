@@ -181,7 +181,7 @@ def fetch_one_video_from_drive():
     download_attempts = 0
     download_failures = 0
     all_are_published = True
-    first_published_video = None
+    published_videos_list = []
 
     # Find first video NOT in published list
     for video_info in videos:
@@ -190,9 +190,8 @@ def fetch_one_video_from_drive():
         # Check if already published
         if video_name in published:
             print(f"Skipping {video_name} - already published")
-            # Keep track of the first published video (for recycling)
-            if first_published_video is None:
-                first_published_video = video_info
+            # Track all published videos for fair rotation
+            published_videos_list.append(video_info)
             continue
 
         # Found an unpublished video
@@ -213,14 +212,33 @@ def fetch_one_video_from_drive():
         print(f"\n❌ Failed to download all {download_attempts} video(s). Check permissions.")
         return None
 
-    # All videos are published - recycle from the beginning
-    if all_are_published and first_published_video:
-        print("\n⚠️  All videos have been published. Recycling from the beginning...")
-        video_name = first_published_video['name']
-        print(f"🔄 Re-publishing: {video_name}")
+    # All videos are published - recycle using FAIR ROTATION
+    if all_are_published and published_videos_list:
+        print("\n⚠️  All videos have been published. Recycling with fair rotation...")
+        
+        # Find the least recently published video (fair rotation)
+        # The published list is in chronological order (oldest first)
+        # We want to recycle in the same order
+        video_to_recycle = None
+        
+        # Find the first video in published_videos.json that exists in our Drive folder
+        for pub_entry in published:
+            for vid_info in published_videos_list:
+                if vid_info['name'] == pub_entry:
+                    video_to_recycle = vid_info
+                    break
+            if video_to_recycle:
+                break
+        
+        # Fallback to first published video if no match found
+        if not video_to_recycle:
+            video_to_recycle = published_videos_list[0]
+        
+        video_name = video_to_recycle['name']
+        print(f"🔄 Re-publishing (fair rotation): {video_name}")
 
         local_path = os.path.join(LOCAL_INPUT_DIR, video_name)
-        if download_video(service, first_published_video, local_path):
+        if download_video(service, video_to_recycle, local_path):
             print(f"\n✅ Selected (recycled): {video_name}")
             return local_path
         else:
