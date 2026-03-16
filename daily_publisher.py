@@ -56,19 +56,29 @@ def select_video(specific_video=None):
             # It's just a filename, join with PROCESSED_DIR
             vid_path = os.path.join(PROCESSED_DIR, specific_video)
             name = specific_video
-            
+
         if os.path.exists(vid_path):
             if name in published:
-                print(f"⚠️ Video {name} was flagged as already published, but proceeding anyway as explicitly requested.")
+                print(f"🔄 Video {name} was already published - Re-publishing (recycling)")
             return vid_path, name
         else:
             print(f"❌ Error: Specific video {name} not found")
             return None, None
 
+    # Find first unpublished video
     for vid in all_videos:
         name = os.path.basename(vid)
         if name not in published:
             return vid, name
+    
+    # All videos are published - recycle the first one
+    if all_videos:
+        first_video = all_videos[0]
+        name = os.path.basename(first_video)
+        print(f"\n⚠️  All videos have been published. Recycling from the beginning...")
+        print(f"🔄 Re-publishing: {name}")
+        return first_video, name
+    
     return None, None
 
 def generate_caption():
@@ -141,7 +151,8 @@ def main():
     specific_video = sys.argv[1] if len(sys.argv) > 1 else None
     video_path, video_name = select_video(specific_video)
     if not video_path:
-        print("✅ No new videos found to publish. Exiting.")
+        print("✅ No videos found in Processed_Videos folder.")
+        print("   (Download new videos from Google Drive first)")
         return
         
     print(f"👉 Selected Video: {video_name}")
@@ -205,13 +216,22 @@ def main():
     except Exception as e:
         print(f"❌ YouTube upload failed: {e}")
         
-    # Record as published regardless of partial success, 
+    # Record as published regardless of partial success,
     # to avoid repeating the same video. Alternatively, only record if fully successful.
     print("\n✅ Marking video as published.")
+
+    # Check if this is a recycled video (already in published_videos.json)
+    published_list = get_already_published()
+    is_recycled = any(item["video_name"] == video_name for item in published_list)
+
+    if is_recycled:
+        print(f"   🔄 This is a recycled video (re-publishing)")
+
     mark_as_published(video_name, {
         "title": title,
         "description": description,
-        "success_flags": success_flags
+        "success_flags": success_flags,
+        "recycled": is_recycled
     })
     
     # Move the published video to Published_Videos folder

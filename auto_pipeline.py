@@ -1,6 +1,6 @@
 """
 Main Automation Pipeline for GitHub Actions
-1. Fetch ONE video from Dropbox
+1. Fetch ONE video from Google Drive
 2. Process (upscale + remove watermark)
 3. Upload to social media platforms
 """
@@ -19,24 +19,24 @@ load_dotenv()
 def run_pipeline():
     """
     Complete automation pipeline:
-    Dropbox → Process → Upload to Social Media
+    Google Drive → Process → Upload to Social Media
 
     Only processes ONE new video per run.
-    If no new videos, exits gracefully.
+    If all videos are published, recycles from the beginning.
     """
     print("\n" + "=" * 60)
     print("🚀 STARTING AUTOMATION PIPELINE")
     print("=" * 60 + "\n")
 
-    # Step 1: Fetch ONE video from Dropbox
-    print("📥 STEP 1: Fetching video from Dropbox...")
-    from dropbox_fetch import fetch_one_video_from_dropbox
+    # Step 1: Fetch ONE video from Google Drive
+    print("📥 STEP 1: Fetching video from Google Drive...")
+    from google_drive_fetch import fetch_one_video_from_drive
 
-    downloaded = fetch_one_video_from_dropbox()
+    downloaded = fetch_one_video_from_drive()
 
     if not downloaded:
-        print("\n✅ No new videos to process. Pipeline complete.")
-        print("   (This is normal if all videos have been processed)")
+        print("\n⚠️  No videos available to process.")
+        print("   (Add new videos to Google Drive or check credentials)")
         return
 
     print(f"\n✅ Step 1 complete: Video downloaded\n")
