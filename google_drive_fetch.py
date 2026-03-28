@@ -215,25 +215,48 @@ def fetch_one_video_from_drive():
     # All videos are published - recycle using FAIR ROTATION
     if all_are_published and published_videos_list:
         print("\n⚠️  All videos have been published. Recycling with fair rotation...")
-        
-        # Find the least recently published video (fair rotation)
-        # The published list is in chronological order (oldest first)
-        # We want to recycle in the same order
-        video_to_recycle = None
-        
-        # Find the first video in published_videos.json that exists in our Drive folder
-        for pub_entry in published:
-            for vid_info in published_videos_list:
-                if vid_info['name'] == pub_entry:
-                    video_to_recycle = vid_info
-                    break
-            if video_to_recycle:
+
+        # Build a mapping of video name -> last published timestamp
+        # We want to find the video that was published LEAST recently (oldest)
+        video_last_published = {}
+        for entry in published:
+            video_name = entry.get('video_name', '')
+            if video_name:
+                # Get the timestamp from metadata if available
+                timestamp = entry.get('metadata', {}).get('published_at', '')
+                # Store/update with the latest timestamp for this video
+                video_last_published[video_name] = timestamp
+
+        # Find unique video names from Drive folder
+        drive_video_names = set(v['name'] for v in published_videos_list)
+
+        # Find the video with the oldest (or missing) timestamp
+        # Videos without timestamps are prioritized, then oldest first
+        video_to_recycle_name = None
+        oldest_timestamp = None
+
+        for video_name in drive_video_names:
+            if video_name not in video_last_published:
+                # This video has no timestamp - prioritize it
+                video_to_recycle_name = video_name
                 break
-        
-        # Fallback to first published video if no match found
-        if not video_to_recycle:
-            video_to_recycle = published_videos_list[0]
-        
+            else:
+                ts = video_last_published[video_name]
+                if oldest_timestamp is None or ts < oldest_timestamp:
+                    oldest_timestamp = ts
+                    video_to_recycle_name = video_name
+
+        # Fallback to first video if nothing found
+        if not video_to_recycle_name:
+            video_to_recycle_name = published_videos_list[0]['name']
+
+        # Find the video info object
+        video_to_recycle = None
+        for vid_info in published_videos_list:
+            if vid_info['name'] == video_to_recycle_name:
+                video_to_recycle = vid_info
+                break
+
         video_name = video_to_recycle['name']
         print(f"🔄 Re-publishing (fair rotation): {video_name}")
 

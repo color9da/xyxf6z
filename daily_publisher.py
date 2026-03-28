@@ -4,6 +4,7 @@ import glob
 import requests
 import shutil
 import sys
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from pathlib import Path
 
@@ -35,6 +36,8 @@ def get_already_published():
 
 def mark_as_published(video_name, metadata):
     published = get_already_published()
+    # Add timestamp for fair rotation tracking
+    metadata["published_at"] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     published.append({
         "video_name": video_name,
         "metadata": metadata
@@ -75,23 +78,39 @@ def select_video(specific_video=None):
     # All videos are published - use FAIR ROTATION
     if all_videos:
         print(f"\n⚠️  All videos have been published. Recycling with fair rotation...")
-        
-        # Find the least recently published video from our local files
-        # Match against published_videos.json order (chronological)
+
+        # Build a mapping of video name -> last published timestamp
+        # We want to find the video that was published LEAST recently (oldest)
+        video_last_published = {}
+        for entry in published_entries:
+            video_name = entry.get('video_name', '')
+            if video_name:
+                # Get the timestamp from metadata
+                timestamp = entry.get('metadata', {}).get('published_at', '')
+                # Store/update with the latest timestamp for this video
+                video_last_published[video_name] = timestamp
+
+        # Find the video with the oldest (or missing) timestamp
+        # Videos without timestamps are prioritized, then oldest first
         video_to_recycle = None
-        
-        for pub_name in published_names:
-            for vid_path in all_videos:
-                if os.path.basename(vid_path) == pub_name:
-                    video_to_recycle = vid_path
-                    break
-            if video_to_recycle:
+        oldest_timestamp = None
+
+        for vid_path in all_videos:
+            vid_name = os.path.basename(vid_path)
+            if vid_name not in video_last_published:
+                # This video has no timestamp - prioritize it
+                video_to_recycle = vid_path
                 break
-        
-        # Fallback to first video if no match
+            else:
+                ts = video_last_published[vid_name]
+                if oldest_timestamp is None or ts < oldest_timestamp:
+                    oldest_timestamp = ts
+                    video_to_recycle = vid_path
+
+        # Fallback to first video if nothing found
         if not video_to_recycle:
             video_to_recycle = all_videos[0]
-        
+
         name = os.path.basename(video_to_recycle)
         print(f"🔄 Re-publishing (fair rotation): {name}")
         return video_to_recycle, name
