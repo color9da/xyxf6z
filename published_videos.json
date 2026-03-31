@@ -365,5 +365,22 @@
             "recycled": false,
             "published_at": "2026-03-30T23:32:59.904810Z"
         }
+    },
+    {
+        "video_name": "grok-video-1bc084de-1ba2-43f2-9359-fea63a5dbdc8.mp4",
+        "metadata": {
+            "title": "Living my wildest dreams \u2728",
+            "description": "Dancing through life's beautiful moments \ud83d\udc83 #wildandfree #dancing #soulful #wildestdreams",
+            "success_flags": {
+                "instagram_reel": true,
+                "instagram_story": true,
+                "facebook_reel": true,
+                "facebook_story": true,
+                "threads": true,
+                "youtube": false
+            },
+            "recycled": false,
+            "published_at": "2026-03-31T07:04:58.046732Z"
+        }
     }
 ]
