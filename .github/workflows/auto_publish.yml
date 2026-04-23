@@ -80,6 +80,74 @@ jobs:
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
           POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
 
+      - name: Debug Google Drive Connection
+        run: |
+          echo "=== DEBUG: Google Drive Connection ==="
+          echo "Folder ID length: ${#GOOGLE_DRIVE_FOLDER_ID}"
+          echo "Service Account Key length: ${#GOOGLE_SERVICE_ACCOUNT_KEY}"
+          
+          if [ -z "$GOOGLE_DRIVE_FOLDER_ID" ]; then
+            echo "❌ ERROR: GOOGLE_DRIVE_FOLDER_ID is empty!"
+            exit 1
+          fi
+          
+          if [ -z "$GOOGLE_SERVICE_ACCOUNT_KEY" ]; then
+            echo "❌ ERROR: GOOGLE_SERVICE_ACCOUNT_KEY is empty!"
+            exit 1
+          fi
+          
+          # Create a test script to list files
+          cat > test_drive.py << 'EOF'
+import os
+import json
+import tempfile
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+folder_id = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
+sa_key = os.getenv('GOOGLE_SERVICE_ACCOUNT_KEY')
+
+print(f"Folder ID: {folder_id}")
+print(f"Service Account Key starts with: {sa_key[:20]}...")
+
+# Write SA key to temp file
+temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+temp_file.write(sa_key)
+temp_file.close()
+
+try:
+    creds = service_account.Credentials.from_service_account_file(temp_file.name, 
+        scopes=['https://www.googleapis.com/auth/drive.readonly'])
+    service = build('drive', 'v3', credentials=creds)
+    
+    # List files in folder
+    results = service.files().list(
+        q=f"'{folder_id}' in parents and trashed=false",
+        fields="files(id, name, mimeType)",
+        spaces='drive'
+    ).execute()
+    
+    files = results.get('files', [])
+    print(f"\n✅ Found {len(files)} file(s) in folder:")
+    for f in files[:10]:
+        print(f"  - {f.get('name')} ({f.get('mimeType')})")
+    if len(files) > 10:
+        print(f"  ... and {len(files) - 10} more")
+    
+    if not files:
+        print("\n⚠️  Folder appears empty or permissions issue!")
+        print("Check: 1) Folder ID is correct")
+        print("       2) Service account has access to folder")
+        
+finally:
+    os.unlink(temp_file.name)
+EOF
+          
+          python test_drive.py
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+
       - name: Run automation pipeline
         env:
           # Google Drive
