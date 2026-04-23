@@ -21,22 +21,21 @@ def run_pipeline():
     Complete automation pipeline:
     Google Drive → Process → Upload to Social Media
 
-    Only processes ONE new video per run.
-    If all videos are published, recycles from the beginning.
+    If no new videos, reposts a random video from Drive.
     """
     print("\n" + "=" * 60)
     print("🚀 STARTING AUTOMATION PIPELINE")
     print("=" * 60 + "\n")
 
-    # Step 1: Fetch ONE video from Google Drive
+    # Step 1: Fetch ONE video from Google Drive (new or repost)
     print("📥 STEP 1: Fetching video from Google Drive...")
     from google_drive_fetch import fetch_one_video_from_drive
 
     downloaded = fetch_one_video_from_drive()
 
     if not downloaded:
-        print("\n⚠️  No videos available to process.")
-        print("   (Add new videos to Google Drive or check credentials)")
+        print("\n✅ No videos to post (Drive is empty). Pipeline complete.")
+        print("   💡 Add new videos to Google Drive")
         return
 
     print(f"\n✅ Step 1 complete: Video downloaded\n")

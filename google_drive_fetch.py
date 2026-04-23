@@ -24,14 +24,24 @@ LOCAL_INPUT_DIR = os.getenv("LOCAL_INPUT_DIR", "Videos")
 PUBLISHED_LOG = "published_videos.json"
 
 
-def get_published_videos():
-    """Get list of already published video names."""
+def get_published_video_names():
+    """Get list of already published video names (strings only)."""
     if os.path.exists(PUBLISHED_LOG):
         with open(PUBLISHED_LOG, 'r', encoding='utf-8') as f:
             try:
                 data = json.load(f)
-                # Extract video names from the log
                 return [item.get('video_name', '') for item in data]
+            except json.JSONDecodeError:
+                return []
+    return []
+
+
+def get_published_history():
+    """Get full publishing history (list of dicts with metadata)."""
+    if os.path.exists(PUBLISHED_LOG):
+        with open(PUBLISHED_LOG, 'r', encoding='utf-8') as f:
+            try:
+                return json.load(f)
             except json.JSONDecodeError:
                 return []
     return []
@@ -140,7 +150,7 @@ def fetch_one_video_from_drive():
     """
     Fetch ONE video from Google Drive for processing.
     Checks published_videos.json to skip already processed videos.
-    If ALL videos are published, recycles from the beginning.
+    If ALL videos are published, randomly picks one for repost.
 
     Returns:
         Path to downloaded video or None
@@ -152,8 +162,8 @@ def fetch_one_video_from_drive():
     print("FETCHING VIDEO FROM GOOGLE DRIVE")
     print("=" * 60)
 
-    # Get list of already published videos
-    published = get_published_videos()
+    # Get list of already published video names
+    published = get_published_video_names()
     print(f"Already published: {len(published)} video(s)")
     if published:
         for vid in published[:3]:  # Show first 3
@@ -177,97 +187,39 @@ def fetch_one_video_from_drive():
 
     print(f"\nFound {len(videos)} video(s) in Google Drive.")
 
-    # Track if we tried and failed to download any video
-    download_attempts = 0
-    download_failures = 0
-    all_are_published = True
-    published_videos_list = []
-
     # Find first video NOT in published list
     for video_info in videos:
         video_name = video_info['name']
 
-        # Check if already published
         if video_name in published:
             print(f"Skipping {video_name} - already published")
-            # Track all published videos for fair rotation
-            published_videos_list.append(video_info)
             continue
 
-        # Found an unpublished video
-        all_are_published = False
-
-        # Download this video
-        download_attempts += 1
         local_path = os.path.join(LOCAL_INPUT_DIR, video_name)
         if download_video(service, video_info, local_path):
             print(f"\n✅ Selected: {video_name}")
             return local_path
         else:
-            download_failures += 1
-            print(f"⚠️  Download failed, trying next video...")
+            print(f"⚠️  Download failed for {video_name}")
+            continue
 
-    # If we tried to download videos but all failed
-    if download_attempts > 0 and download_failures == download_attempts:
-        print(f"\n❌ Failed to download all {download_attempts} video(s). Check permissions.")
-        return None
-
-    # All videos are published - recycle using FAIR ROTATION
-    if all_are_published and published_videos_list:
-        print("\n⚠️  All videos have been published. Recycling with fair rotation...")
-
-        # Build a mapping of video name -> last published timestamp
-        # We want to find the video that was published LEAST recently (oldest)
-        video_last_published = {}
-        for entry in published:
-            video_name = entry.get('video_name', '')
-            if video_name:
-                # Get the timestamp from metadata if available
-                timestamp = entry.get('metadata', {}).get('published_at', '')
-                # Store/update with the latest timestamp for this video
-                video_last_published[video_name] = timestamp
-
-        # Find unique video names from Drive folder
-        drive_video_names = set(v['name'] for v in published_videos_list)
-
-        # Find the video with the oldest (or missing) timestamp
-        # Videos without timestamps are prioritized, then oldest first
-        video_to_recycle_name = None
-        oldest_timestamp = None
-
-        for video_name in drive_video_names:
-            if video_name not in video_last_published:
-                # This video has no timestamp - prioritize it
-                video_to_recycle_name = video_name
-                break
-            else:
-                ts = video_last_published[video_name]
-                if oldest_timestamp is None or ts < oldest_timestamp:
-                    oldest_timestamp = ts
-                    video_to_recycle_name = video_name
-
-        # Fallback to first video if nothing found
-        if not video_to_recycle_name:
-            video_to_recycle_name = published_videos_list[0]['name']
-
-        # Find the video info object
-        video_to_recycle = None
-        for vid_info in published_videos_list:
-            if vid_info['name'] == video_to_recycle_name:
-                video_to_recycle = vid_info
-                break
-
-        video_name = video_to_recycle['name']
-        print(f"🔄 Re-publishing (fair rotation): {video_name}")
+    # No new videos - pick a random one from Drive for repost
+    if videos:
+        import random
+        print("\n🔄 REPOST MODE: No new videos. Selecting random video from Google Drive...")
+        video_info = random.choice(videos)
+        video_name = video_info['name']
+        print(f"  🎲 Selected for repost: {video_name}")
 
         local_path = os.path.join(LOCAL_INPUT_DIR, video_name)
-        if download_video(service, video_to_recycle, local_path):
-            print(f"\n✅ Selected (recycled): {video_name}")
+        if download_video(service, video_info, local_path):
+            print(f"\n✅ Downloaded for repost: {video_name}")
             return local_path
-        else:
-            print(f"\n❌ Failed to download recycled video.")
-            return None
 
+        print(f"  ⚠️  Failed to download {video_name} from Google Drive")
+        return None
+
+    print("\n✅ All videos have already been published.")
     return None
 
 
