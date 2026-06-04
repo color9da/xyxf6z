@@ -58,54 +58,65 @@ def upload_to_threads(video_path, text):
     print(f"[threads] Text length: {len(text_limited)} characters")
     
     try:
-        # Step 1: Upload to temporary hosting (file.io for reliability)
+        # Step 1: Upload to temporary hosting to get public URL
         print(f"[threads] 📤 Step 1: Uploading to temporary hosting...")
         
         video_url = None
         
-        # Primary method: file.io
-        try:
-            print("[threads] Uploading to file.io...")
-            with open(video_path_obj, 'rb') as video_file:
-                files = {'file': video_file}
-                # Set expiry to 1 day to be safe, auto-delete is default on download
-                response = requests.post('https://file.io/?expires=1d', files=files, timeout=60)
-                
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('success'):
-                    video_url = data.get('link')
-                    print(f"[threads] ✅ Uploaded to file.io: {video_url}")
-                else:
-                    print(f"[threads] ⚠️ file.io error: {data}")
-            else:
-                print(f"[threads] ⚠️ file.io failed with status {response.status_code}")
-        except Exception as e:
-            print(f"[threads] ⚠️ file.io exception: {e}")
-
-        # Fallback: tmpfiles.org
-        if not video_url:
-            print("[threads] ⚠️ Trying fallback to tmpfiles.org...")
+        with open(video_path_obj, 'rb') as f:
+            file_bytes = f.read()
+        
+        # Try multiple hosting services in order
+        def upload_catbox(data):
+            resp = requests.post(
+                'https://catbox.moe/user/api.php',
+                data={'reqtype': 'fileupload'},
+                files={'fileToUpload': ('video.mp4', data, 'video/mp4')},
+                timeout=180
+            )
+            if resp.status_code == 200 and resp.text.startswith('https://'):
+                return resp.text.strip()
+            return None
+        
+        def upload_0x0(data):
+            resp = requests.post(
+                'https://0x0.st',
+                files={'file': ('video.mp4', data, 'video/mp4')},
+                timeout=180
+            )
+            if resp.status_code == 200 and resp.text.startswith('http'):
+                return resp.text.strip()
+            return None
+        
+        def upload_tmpfiles(data):
+            resp = requests.post(
+                'https://tmpfiles.org/api/v1/upload',
+                files={'file': ('video.mp4', data, 'video/mp4')},
+                timeout=180
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('status') == 'success':
+                    url = data.get('data', {}).get('url', '')
+                    if url:
+                        return url.replace('tmpfiles.org/', 'tmpfiles.org/dl/')
+            return None
+        
+        for name, fn in [('catbox.moe', upload_catbox), ('0x0.st', upload_0x0), ('tmpfiles.org', upload_tmpfiles)]:
+            print(f"[threads] Trying {name}...")
             try:
-                with open(video_path_obj, 'rb') as video_file:
-                    files = {'file': ('video.mp4', video_file, 'video/mp4')}
-                    temp_response = requests.post(
-                        'https://tmpfiles.org/api/v1/upload',
-                        files=files,
-                        timeout=180
-                    )
-                
-                if temp_response.status_code == 200:
-                    temp_data = temp_response.json()
-                    temp_url = temp_data.get('data', {}).get('url', '')
-                    if temp_url:
-                        video_url = temp_url.replace('tmpfiles.org/', 'tmpfiles.org/dl/').replace('http://', 'https://')
-                        print(f"[threads] ✅ Uploaded to tmpfiles.org: {video_url}")
+                result = fn(file_bytes)
+                if result:
+                    video_url = result
+                    print(f"[threads] ✅ Uploaded via {name}: {video_url}")
+                    break
+                else:
+                    print(f"[threads] ⚠️ {name} returned no URL")
             except Exception as e:
-                 print(f"[threads] ⚠️ tmpfiles.org exception: {e}")
-
+                print(f"[threads] ⚠️ {name} failed: {e}")
+        
         if not video_url:
-             raise Exception("All hosting attempts failed (file.io and tmpfiles.org)")
+             raise Exception("All hosting attempts failed")
             
         print(f"[threads] ✅ Temporary URL ready: {video_url}")
         
