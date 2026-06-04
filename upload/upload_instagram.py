@@ -40,16 +40,14 @@ def upload_to_instagram(video_path, caption, is_story=False):
     if not user_id:
         raise ValueError("❌ INSTAGRAM_ACCOUNT_ID not set")
 
-    # Validate Instagram token using Instagram Graph API endpoint
-    print("[instagram] 🔍 Validating Instagram access token...")
-    print("[instagram] Using endpoint: graph.instagram.com (NOT graph.facebook.com)")
+    # Validate token using Facebook Graph API (works with both EA and IG tokens)
+    print("[instagram] 🔍 Validating access token via Facebook Graph API...")
     
     try:
-        # CORRECT Instagram Graph API endpoint
         test_resp = requests.get(
-            f"https://graph.instagram.com/me",
+            f"https://graph.facebook.com/v21.0/me",
             params={
-                "fields": "id,username,account_type",
+                "fields": "id,name",
                 "access_token": access_token
             },
             timeout=10
@@ -57,33 +55,51 @@ def upload_to_instagram(video_path, caption, is_story=False):
         
         if test_resp.status_code == 200:
             test_data = test_resp.json()
-            print(f"[instagram] ✅ Instagram Token is VALID!")
-            print(f"[instagram] Username: @{test_data.get('username', 'N/A')}")
-            print(f"[instagram] Account Type: {test_data.get('account_type', 'N/A')}")
+            print(f"[instagram] ✅ Token is VALID (Facebook user: {test_data.get('name', 'N/A')})")
             
-            # Verify ID matches
-            ig_id_from_token = test_data.get('id')
-            if ig_id_from_token:
-                if str(ig_id_from_token) == str(user_id):
-                    print(f"[instagram] ✅ Account ID matches!")
-                else:
-                    print(f"[instagram] ⚠️  ID mismatch!")
-                    print(f"   In .env: {user_id}")
-                    print(f"   From token: {ig_id_from_token}")
-                    print(f"[instagram] 🔄 Using ID from token: {ig_id_from_token}")
-                    user_id = ig_id_from_token
+            # Resolve Instagram Business Account ID from connected Facebook Page
+            print("[instagram] 🔍 Resolving Instagram Business Account...")
+            accounts_resp = requests.get(
+                f"https://graph.facebook.com/v21.0/me/accounts",
+                params={
+                    "fields": "id,name,instagram_business_account{id,username}",
+                    "access_token": access_token
+                },
+                timeout=10
+            )
+            
+            if accounts_resp.status_code == 200:
+                accounts_data = accounts_resp.json().get('data', [])
+                found = False
+                for page in accounts_data:
+                    ig_account = page.get('instagram_business_account')
+                    if ig_account:
+                        ig_id = ig_account.get('id')
+                        ig_username = ig_account.get('username', 'N/A')
+                        print(f"[instagram] ✅ Found Instagram Business Account: @{ig_username} (ID: {ig_id})")
+                        if str(ig_id) != str(user_id):
+                            print(f"[instagram] ⚠️  Account ID mismatch! Updating from {user_id} → {ig_id}")
+                            user_id = ig_id
+                        found = True
+                        break
+                
+                if not found:
+                    print(f"[instagram] ❌ No Instagram Business Account linked to any Facebook Page!")
+                    print(f"[instagram] ⚠️  Make sure your Instagram is a Business/Creator account")
+                    print(f"[instagram] ⚠️  and linked to your Facebook Page in Settings.")
+                    raise Exception("No Instagram Business Account linked to Facebook Page")
+            else:
+                print(f"[instagram] ⚠️  Could not list pages: {accounts_resp.text[:200]}")
+                print(f"[instagram] ⚠️  Proceeding with configured account ID: {user_id}")
         else:
             error_data = test_resp.json() if test_resp.text else {}
             error_msg = error_data.get('error', {}).get('message', 'Invalid token')
             error_code = error_data.get('error', {}).get('code', 'Unknown')
             
-            print(f"[instagram] ❌ Instagram Token INVALID!")
+            print(f"[instagram] ❌ Token INVALID!")
             print(f"[instagram] Error Code: {error_code}")
             print(f"[instagram] Error: {error_msg}")
-            print(f"[instagram] Response: {test_resp.text[:300]}")
             print(f"[instagram] ⚠️  SKIPPING Instagram upload")
-            print(f"[instagram] 📖 See INSTAGRAM_SETUP.md to get new token")
-            
             raise Exception(f"Instagram token invalid (Code {error_code}): {error_msg}")
             
     except requests.exceptions.RequestException as e:
