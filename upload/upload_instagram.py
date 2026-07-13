@@ -200,10 +200,28 @@ def upload_to_instagram(video_path, caption, is_story=False):
     upload_path = compressed
 
     try:
-        print("[instagram] Step 1: Uploading to temporary hosting...")
-        video_url = upload_to_temporary_host(upload_path)
-        print(f"[instagram] Temporary URL created: {video_url}")
-
+        print("[instagram] Step 1: Uploading to GitHub raw URL...")
+        import uuid as _uuid, os as _os, requests as _req, base64 as _b64, time as _time
+        _vid_name = "ig_" + _uuid.uuid4().hex[:8] + ".mp4"
+        _token = _os.environ.get("GH_TOKEN") or _os.environ.get("GITHUB_TOKEN") or ""
+        if _token:
+            with open(str(video_path_obj), "rb") as _f:
+                _enc = _b64.b64encode(_f.read()).decode()
+            _put = _req.put("https://api.github.com/repos/color9da/xyxf6z/contents/" + _vid_name,
+                headers={"Authorization": "Bearer " + _token, "Accept": "application/vnd.github+json"},
+                json={"message": "add " + _vid_name, "content": _enc, "branch": "main"}, timeout=30)
+            if _put.status_code in [200, 201]:
+                print("[instagram] Uploaded via GitHub API")
+            else:
+                print("[instagram] Upload failed (" + str(_put.status_code) + ")")
+                return {'status': 'skipped', 'reason': 'Upload failed', 'platform': 'instagram'}
+        else:
+            print("[instagram] No GITHUB_TOKEN found")
+            return {'status': 'skipped', 'reason': 'No token', 'platform': 'instagram'}
+        
+        video_url = "https://raw.githubusercontent.com/color9da/xyxf6z/main/" + _vid_name
+        print("[instagram] GitHub raw URL: " + video_url)
+        _time.sleep(5)
         print(f"[instagram] Step 2: Creating Instagram {media_type} container...")
 
         container_url = f"https://graph.facebook.com/v21.0/{user_id}/media"
@@ -227,7 +245,7 @@ def upload_to_instagram(video_path, caption, is_story=False):
             print(f"[instagram] Full response: {container_response.text[:500]}")
 
             print("[instagram] Retrying with Instagram Graph API endpoint...")
-            container_url = f"https://graph.instagram.com/v21.0/{user_id}/media"
+            container_url = f"https://graph.facebook.com/v21.0/{user_id}/media"
             container_response = requests.post(container_url, params=container_params, timeout=60)
 
             if container_response.status_code != 200:
