@@ -287,10 +287,6 @@ def upload_to_instagram(video_path, caption, is_story=False):
         media_id = pub_resp.json().get('id')
         print("[instagram] SUCCESS! Media ID: " + str(media_id))
         return {'id': media_id, 'platform': 'instagram', 'status': 'success'}
-            'id': media_id,
-            'platform': 'instagram',
-            'status': 'success'
-        }
 
     except Exception as e:
         print("[instagram] ERROR!")
