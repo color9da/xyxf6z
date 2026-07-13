@@ -217,13 +217,20 @@ def upload_to_instagram(video_path, caption, is_story=False):
                 return {'status': 'skipped', 'reason': 'Upload failed', 'platform': 'instagram'}
         else:
             print("[instagram] No GITHUB_TOKEN found, using git push...")
-            import os as _os2
+            import os as _os2, subprocess as _sp2
             _os2.system("cp " + str(video_path_obj) + " " + _vid_name)
             _os2.system("git config --global user.email bot@bot.com")
             _os2.system("git config --global user.name Bot")
             _os2.system("git add -f " + _vid_name)
             _os2.system("git commit --no-verify -m \"add " + _vid_name + "\"")
-            _os2.system("git push --force origin main")
+            _r1 = _sp2.run(["git", "push", "origin", "main"], capture_output=True, text=True)
+            if _r1.returncode != 0:
+                print("[instagram] git push stderr: " + _r1.stderr[:200])
+                print("[instagram] Trying --force...")
+                _r2 = _sp2.run(["git", "push", "--force", "origin", "main"], capture_output=True, text=True)
+                if _r2.returncode != 0:
+                    print("[instagram] Force push also failed: " + _r2.stderr[:200])
+                    return {'status': 'skipped', 'reason': 'Git push failed', 'platform': 'instagram'}
         
         video_url = "https://raw.githubusercontent.com/color9da/xyxf6z/main/" + _vid_name
         print("[instagram] GitHub raw URL: " + video_url)
