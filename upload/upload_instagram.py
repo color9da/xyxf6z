@@ -246,8 +246,8 @@ def upload_to_instagram(video_path, caption, is_story=False):
 
         if not is_story:
             container_params['caption'] = caption_limited
-            container_params['share_to_feed'] = 'false'
-            container_params['thumb_offset'] = '5000'
+
+
 
         container_response = requests.post(container_url, params=container_params, timeout=60)
 
