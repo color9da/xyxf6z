@@ -162,6 +162,9 @@ jobs:
           # AI Caption
           POLLINATIONS_API_KEY: ${{ secrets.POLLINATIONS_API_KEY }}
           AI_MODEL: openai
+          
+          # GitHub Token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Starting automation pipeline..."
           python auto_pipeline.py
